@@ -12,6 +12,7 @@
 //  [[x x x] [x x x] [x x x]]
 
 use console::Term;
+use std::iter::zip;
 use std::usize;
 
 struct GameInfo {
@@ -19,6 +20,13 @@ struct GameInfo {
     noughts_turn: bool,
     selected_column: usize,
     selected_row: usize,
+}
+
+enum WinState {
+    NoughtsWin,
+    CrossesWin,
+    PlayOn,
+    Draw,
 }
 
 fn main() {
@@ -31,7 +39,12 @@ fn main() {
     let mut selected_column = 0;
     let mut selected_row = 0;
 
-    let mut game = GameInfo { board, noughts_turn, selected_column, selected_row };
+    let mut game = GameInfo {
+        board,
+        noughts_turn,
+        selected_column,
+        selected_row,
+    };
 
     print_frame(&mut game);
 
@@ -41,12 +54,35 @@ fn main() {
         while !selected {
             if let Ok(character) = stdout.read_key() {
                 match character {
-                    ArrowDown => if game.selected_row < 2 {game.selected_row += 1},
-                    ArrowUp => if game.selected_row > 0 {game.selected_row -= 1},
-                    ArrowLeft => if game.selected_column > 0 {game.selected_column -= 1},
-                    ArrowRight => if game.selected_column < 2 {game.selected_column += 1},
-                    Enter => if game.board[game.selected_row][game.selected_column] == '*' { selected = true },
-                    _ => break 'game_loop,
+                    ArrowDown => {
+                        if game.selected_row < 2 {
+                            game.selected_row += 1
+                        }
+                    }
+                    ArrowUp => {
+                        if game.selected_row > 0 {
+                            game.selected_row -= 1
+                        }
+                    }
+                    ArrowLeft => {
+                        if game.selected_column > 0 {
+                            game.selected_column -= 1
+                        }
+                    }
+                    ArrowRight => {
+                        if game.selected_column < 2 {
+                            game.selected_column += 1
+                        }
+                    }
+                    Enter |  Char(' ') => {
+                        if game.board[game.selected_row][game.selected_column] == '*' {
+                            selected = true
+                        }
+                    }
+                    Char('q') => {
+                        break 'game_loop
+                    }
+                    _ => continue,
                 }
             }
             print_frame(&mut game);
@@ -63,21 +99,39 @@ fn main() {
         game.noughts_turn = !game.noughts_turn; // toggle turn
 
         print_frame(&mut game);
+
+        match check_board(&mut game) {
+            WinState::CrossesWin => {
+                print!("{esc}c", esc = 27 as char); // clear terminal
+                println!("Crosses win!");
+                return;
+            }
+            WinState::NoughtsWin => {
+                print!("{esc}c", esc = 27 as char); // clear terminal
+                println!("Noughts win!");
+                return;
+            }
+            WinState::Draw => {
+                print!("{esc}c", esc = 27 as char); // clear terminal
+                println!("Draw!");
+                return;
+            }
+            WinState::PlayOn => {
+                print!("{esc}c", esc = 27 as char); // clear terminal
+            }
+        }
     }
 }
 
 fn print_frame(game: &mut GameInfo) {
     print!("{esc}c", esc = 27 as char); // clear terminal
-    
+
     // turn intro
     if game.noughts_turn {
         println!("Noughts turn!");
     } else {
         println!("Crosses turn!");
     }
-
-
-
 
     for i in 0..=2 {
         for j in 0..=2 {
@@ -89,4 +143,90 @@ fn print_frame(game: &mut GameInfo) {
         }
         println!("");
     }
+}
+
+fn check_board(game: &mut GameInfo) -> WinState {
+    // check horizontal wins
+    let mut winner:Option<char> = None;
+    for i in 0..=2 {
+        let player = game.board[i][0];
+        for j in 0..=2 {
+            let active_cell = game.board[i][j];
+            if active_cell == '*' {
+                break; // row can't possibly be winning if there's an empty cell
+            }
+            if active_cell != player {
+                break;
+            } else if j == 2 {
+                winner = Some(player);
+            };
+        }
+    }
+
+    // check vertical wins
+    for j in 0..=2 {
+        let player = game.board[0][j];
+        for i in 0..=2 {
+            let active_cell = game.board[i][j];
+            if active_cell == '*' {
+                break; // row can't possibly be winning if there's an empty cell
+            }
+            if active_cell != player {
+                break;
+            } else if i == 2 {
+                winner = Some(player);
+            };
+        }
+    }
+
+    // check up/down left/right diagonal
+    let player = game.board[0][0];
+    for i in 0..=2 {
+        let active_cell = game.board[i][i];
+        if active_cell != player {
+            break;
+        }
+        if i == 2 {
+            winner = Some(player);
+        }
+    }
+
+    // check down/up left/right diagonal
+    let player = game.board[2][0];
+    for (i, j) in zip((0..=2).rev(), 0..=2) {
+        let active_cell = game.board[i][j];
+        if active_cell != player {
+            break;
+        }
+        if i == 0 {
+            winner = Some(player);
+        }
+    }
+
+    // check for draw
+    'draw_check: for i in 0..=2 {
+        for j in 0..=2 {
+            if game.board[i][j] == '*' {
+                break 'draw_check;
+            }
+
+            if i == 2 && j == 2 {
+                return WinState::Draw;
+            }
+        }
+    }
+
+    // TODO implement check for when the game is unwinnable
+
+
+    match winner {
+        Some(c) => {
+            match c {
+                'x' => WinState::CrossesWin,
+                'o' => WinState::NoughtsWin,
+                _ => WinState::PlayOn,
+            }
+        },
+        None => WinState::PlayOn
+        }
 }
